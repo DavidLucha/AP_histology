@@ -174,8 +174,6 @@ clean_tiffs(gui_data.image_path, true);
 % Add image path to figure title
 set(gui_data.image_path_text,'String',gui_data.image_path);
 
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Load images
 image_dir = dir(fullfile(gui_data.image_path,'*.tif*'));
 image_filenames = cellfun(@(path,name) fullfile(path,name), ...
@@ -202,17 +200,6 @@ n_channels = size(images{1},3);
 clim_min = squeeze(min(cell2mat(cellfun(@(x) min(x,[],[1,2]),images,'uni',false)),[],1));
 clim_max = squeeze(max(cell2mat(cellfun(@(x) max(x,[],[1,2]),images,'uni',false)),[],1));
 gui_data.clim = [clim_min,clim_max];
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-
-
-
-
-
-
-
-
 
 
 % (colors: check for interpreted metadata)
