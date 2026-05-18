@@ -1,10 +1,15 @@
 function AP_histology(image_path,channel_colors)
 % AP_histology(images,channel_colors)
 %
-% GUI for viewing and processing mouse brain slice histology
+% GUI for viewing and processing histology
+
+% TO DO:
+% - allow input arguments for image path and channel colors
+% - save clim?
 
 
 %% Create gui data structure
+
 gui_data = struct;
 
 %% Create GUI
@@ -12,7 +17,7 @@ gui_data = struct;
 % Create figure for scrolling and ROIs
 fig_position = [0.025,0.15,0.3,0.7];
 gui_fig = figure('Color',[0.5,0.5,0.5],'Name','AP histology', ...
-    'Units','normalized','position',fig_position,'NumberTitle','off');
+    'Units','normalized','position',fig_position);
 set(gui_fig,'WindowScrollWheelFcn',{@scrollbar_image_MouseWheel, gui_fig});
 
 % Make figure toolbar available 
@@ -41,7 +46,7 @@ uimenu(gui_data.menu.images,'Text','Set channel properties','MenuSelectedFcn', .
 gui_data.menu.preprocess = uimenu(gui_fig,'Text','Preprocessing');
 uimenu(gui_data.menu.preprocess,'Text','Re-order slices','MenuSelectedFcn', ...
     {@ap_histology.reorder_slices,gui_fig});
-uimenu(gui_data.menu.preprocess,'Text','Rotate + center slices','MenuSelectedFcn', ...
+uimenu(gui_data.menu.preprocess,'Text','Rotate & center slices','MenuSelectedFcn', ...
     {@ap_histology.rotate_center_slices,gui_fig});
 uimenu(gui_data.menu.preprocess,'Text','Flip slices','MenuSelectedFcn', ...
     {@ap_histology.flip_slices,gui_fig});
@@ -69,13 +74,6 @@ uimenu(gui_data.menu.view,'Text','Aligned atlas','Checked','off', ...
     'MenuSelectedFcn',{@menu_check,gui_fig},'Enable','off');
 uimenu(gui_data.menu.view,'Text','Annotations','Checked','on', ...
     'MenuSelectedFcn',{@menu_check,gui_fig},'Enable','on');
-
-% Export menu
-gui_data.menu.export = uimenu(gui_fig,'Text','Export');
-uimenu(gui_data.menu.export,'Text','Vector images','Enable','off', ...
-    'MenuSelectedFcn',{@ap_histology.export_annotated_histology_vector,gui_fig});
-uimenu(gui_data.menu.export,'Text','IBL probe coordinates','Enable','off', ...
-    'MenuSelectedFcn',{@ap_histology.export_ibl_probe,gui_fig});
 
 %%%% 
 
@@ -118,16 +116,8 @@ uicontrol('style','text','units','normalized', ...
     'position',[0,ypos(2),scrollbar_label_width,ypos(4)], ...
     'String','Color min')
 
-% Text for loaded data path
-ypos = [scrollbar_label_width, 4*scrollbar_height, 1-scrollbar_label_width, scrollbar_height];
-gui_data.image_path_text = uicontrol('style','text','units','normalized','position',ypos, ...
-    'HorizontalAlignment','left');
-uicontrol('style','text','units','normalized', ...
-    'position',[0,ypos(2),scrollbar_label_width,ypos(4)], ...
-    'String','Image path:')
-
 % Draw image, set hover function (for CCF)
-im_ax = axes('Units','normalized','Position',[0,4*scrollbar_height,1,1-4*scrollbar_height],'color',[0.5,0.5,0.5]);
+im_ax = axes('Units','normalized','Position',[0,4*scrollbar_height,1,1-4*scrollbar_height]);
 gui_data.im_h = imagesc(im_ax,NaN);
 axis image off;
 gui_fig.WindowButtonMotionFcn = {@hover_label,gui_fig};
@@ -136,7 +126,7 @@ gui_fig.WindowButtonMotionFcn = {@hover_label,gui_fig};
 gui_data.im_text = text( ...
     interp1([0,1],gui_data.im_h.Parent.XLim,0.05), ...
     interp1([0,1],gui_data.im_h.Parent.YLim,0.05), ...
-    '','color','w','BackgroundColor','k','FontSize',14,'Interpreter','none');
+    '','color','w','BackgroundColor','k','FontSize',14);
 
 % Save function handles for external calling
 gui_data.update = @update_image;
@@ -168,11 +158,15 @@ if gui_data.image_path == 0
     return
 end
 
-% Clean tiff images
-clean_tiffs(gui_data.image_path, true);
+% Set save filename, create file if it doesn't exist
+gui_data.histology_processing_filename = fullfile(gui_data.image_path,'AP_histology_processing.mat');
 
-% Add image path to figure title
-set(gui_data.image_path_text,'String',gui_data.image_path);
+if ~exist(gui_data.histology_processing_filename,'file')
+    AP_histology_processing = struct;
+    save(gui_data.histology_processing_filename,'AP_histology_processing');
+end
+
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -220,7 +214,7 @@ image_metadata = ap_histology.read_image_metadata(image_filenames{1});
 if isempty(image_metadata)
     % Default channel colors
     default_colors = ...
-        [1,0,0;0,1,0;0,0,1; ... % RGB
+        [1,1,1;1,0,0;0,1,0;0,0,1; ... % RGB % 24/3/26 David; start with white
         0,1,1;1,0,1;1,1,0];     % CYM
     if n_channels > 6
         default_colors = hsv(n_channels);
@@ -258,23 +252,16 @@ set(gui_data.scrollbar_channel, ...
 
 set(gui_data.scrollbar_white, ...
     'min',0,'max',max(clim_max),'value',max(gui_data.clim(:,2)), ...
-    'sliderstep',[1,200].*repmat(1/double(max(gui_data.clim(:,2))),1,2));
+    'sliderstep',repmat(1/double(max(gui_data.clim(:,2))),1,2));
 
 set(gui_data.scrollbar_black, ...
     'min',0,'max',max(clim_max),'value',0, ...
-    'sliderstep',[1,200].*repmat(1/double(max(gui_data.clim(:,2))),1,2));
+    'sliderstep',repmat(1/double(max(gui_data.clim(:,2))),1,2));
 
 % Package data
 gui_data.data = images;
 gui_data.curr_slice = 1;
 gui_data.curr_im_idx = 1;
-
-% Set save filename, create file if it doesn't exist
-gui_data.histology_processing_filename = fullfile(gui_data.image_path,'AP_histology_processing.mat');
-if ~exist(gui_data.histology_processing_filename,'file')
-    AP_histology_processing = struct;
-    save(gui_data.histology_processing_filename,'AP_histology_processing');
-end
 
 % Update guidata
 guidata(gui_fig,gui_data);
@@ -338,7 +325,7 @@ im_display = ap_histology.rigid_transform(im_rgb,curr_im_idx,AP_histology_proces
 
 %%% Add overlays
 
-overlay_dilation = 1;
+overlay_dilation = 3;
 
 % Atlas boundaries 
 atlas_menu_idx = contains({gui_data.menu.view.Children.Text},'atlas','IgnoreCase',true);
@@ -394,6 +381,7 @@ if annotations_view && isfield(AP_histology_processing,'annotation')
                 AP_histology_processing.annotation(curr_annotation).vertices_histology{curr_im_idx});
             annotation_mask = imdilate(bwperim(createMask(annotation_shape,false(size(im_display)))),ones(overlay_dilation));
         end
+
         
         im_display = imoverlay(im_display,annotation_mask,'y');
 
@@ -423,15 +411,6 @@ set(gui_data.im_text, 'Position', ...
 % Ensure image scrollbar matches image number (if update called externally)
 gui_data.scrollbar_image.Value = gui_data.curr_slice;
 
-% Set axis limits to max across images
-% (only if not zoomed in - slightly hacky, look for origin)
-if min(gui_data.im_h.Parent.XLim) == 0.5 && ...
-        min(gui_data.im_h.Parent.YLim) == 0.5
-    max_lim = max(cell2mat(cellfun(@size,gui_data.data,'uni',false)),[],1);
-    gui_data.im_h.Parent.XLim = [0,max_lim(2)]+0.5;
-    gui_data.im_h.Parent.YLim = [0,max_lim(1)]+0.5;
-end
-
 % Prioritze drawing this figure
 drawnow;
 
@@ -455,11 +434,6 @@ gui_data.menu.view.Children(view_aligned_atlas_menu_idx).Enable = atlas_aligned_
 if ~atlas_aligned_flag
     gui_data.menu.view.Children(view_aligned_atlas_menu_idx).Checked = atlas_aligned_flag;
 end
-
-% If annotation exists: enable IBL exporting
-ibl_enable = isfield(AP_histology_processing,'annotation');
-ibl_export_menu_idx = contains({gui_data.menu.export.Children.Text},'ibl','IgnoreCase',true);
-gui_data.menu.export.Children(ibl_export_menu_idx).Enable = ibl_enable;
 
 % Disable image/channel scrollbars if only one image
 if isscalar(gui_data.data)
@@ -545,10 +519,6 @@ gui_data.scrollbar_channel.BackgroundColor = ...
     gui_data.channel_colors(curr_channel,:);
 
 % Set black/white scrollbars for selected channel
-% (matlab bug - scrollbar needs 2x sets to update if last selected)
-gui_data.scrollbar_black.Value = gui_data.scrollbar_black.Min;
-gui_data.scrollbar_white.Value = gui_data.scrollbar_white.Max;
-% (update to actual target value)
 gui_data.scrollbar_black.Value = gui_data.clim(curr_channel,1);
 gui_data.scrollbar_white.Value = gui_data.clim(curr_channel,2);
 
@@ -610,7 +580,7 @@ drawnow;
 n_slices = length(gui_data.data);
 slice_atlas = struct('tv',cell(n_slices,1), 'av',cell(n_slices,1));
 slice_atlas_ccf = struct('ap',cell(n_slices,1),'ml',cell(n_slices,1),'dv',cell(n_slices,1));
-for curr_slice = 1:n_slices
+for curr_slice = 1:length(gui_data.data)
     [slice_atlas(curr_slice),slice_atlas_ccf(curr_slice)] = ...
         ap_histology.grab_atlas_slice(av,tv, ...
         AP_histology_processing.histology_ccf.slice_vector, ...
@@ -623,10 +593,9 @@ gui_data.atlas_slice_coords = slice_atlas_ccf;
 % Update guidata
 guidata(gui_fig, gui_data);
 
-% Turn on atlas view (if atlas is aligned)
-atlas_aligned_flag = any(isfield(AP_histology_processing,{'control_points','atlas2histology_tform'}));
+% Turn on atlas view
 view_aligned_atlas_menu_idx = contains({gui_data.menu.view.Children.Text},'atlas','IgnoreCase',true);
-gui_data.menu.view.Children(view_aligned_atlas_menu_idx).Checked = atlas_aligned_flag;
+gui_data.menu.view.Children(view_aligned_atlas_menu_idx).Checked = true;
 
 % Update image
 gui_data.im_text.String = '';
@@ -666,10 +635,9 @@ if atlas_view
         return
     end
 
-    % Get CCF area name at mouse position, format as "area (acronym)"
+    % Get CCF area at mouse position
     ccf_idx = gui_data.curr_atlas_slice(hover_y,hover_x);
-    area_name = strrep(sprintf('%s (%s)',string(gui_data.st(ccf_idx,:).name), ...
-        string(gui_data.st(ccf_idx,:).acronym)),'"','');
+    area_name = gui_data.st(ccf_idx,:).name;
 
     % Display area name
     set(gui_data.im_text,'Position', ...
