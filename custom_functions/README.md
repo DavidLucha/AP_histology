@@ -1,3 +1,17 @@
+# Custom additions to AP_histology
+
+Everything in this folder is additive — upstream has no `custom_functions/`,
+so `git pull` from `petersaj/AP_histology` never conflicts with it.
+
+- `clean_tiffs.m` — OME-TIFF directory-count fixer, called by
+  `AP_histology.m` on load. Previously lived outside the repo in
+  `NP-Analysis/matlab_functions/`, which made a clean checkout fail at
+  `load_images`. **Remove that folder from your MATLAB path** so the old
+  copy can't shadow this one.
+- `+dlh/` — figure export (below).
+
+---
+
 # Figure export for AP_histology (`+dlh`)
 
 Export aligned histology for figures — a full-resolution image with your
@@ -53,6 +67,7 @@ Per slice, `<prefix>_slice05_…`:
 
 | File | What it is |
 |---|---|
+| `_channels.tif` | **Raw per-channel stack for Fiji** — full bit depth, rigid transform applied, *no* colour limits baked in |
 | `_image.png` | Histology at full resolution, exactly the channel colours and min/max you have set, no overlay |
 | `_overlay.png` | Same, with the CCF and annotations burned in (optional) |
 | `_vectors.svg` | CCF outlines + annotations only, transparent background |
@@ -61,6 +76,27 @@ Per slice, `<prefix>_slice05_…`:
 `_image.png` and `_vectors.svg` are the same pixel dimensions with a
 matching SVG `viewBox`, so dropping both into Illustrator lines them up
 exactly. Use the combined SVG if you'd rather carry one file around.
+
+### The channel stack (`_channels.tif`)
+
+The rasters above are 8-bit RGB with your current min/max already burned in
+— fine as a figure panel, useless for adjusting afterwards. `_channels.tif`
+is the opposite: one page per channel, native bit depth (usually uint16),
+straight out of `gui_data.data` with only the rigid transform applied. No
+scaling, no clipping, no compositing.
+
+So the workflow is: align in AP_histology, export the stack, and do all the
+brightness/contrast work in Fiji where it's responsive. It carries ImageJ
+hyperstack metadata, so Fiji opens it as a composite with the channels
+already separated. A `_channels.txt` sidecar lists which page is which,
+each channel's colour, and where the gui sliders were sitting.
+
+Because it comes straight from the loaded data, exporting it needs **no
+redraw at all** — with only this box ticked, nothing in the gui repaints.
+That's the fast path when AP_histology is crawling over a remote session.
+
+The geometry matches `_image.png` and `_vectors.svg` exactly, so an overlay
+exported alongside still lines up on the Fiji-adjusted image.
 
 Every CCF structure arrives as its own group **named by acronym** (`PO`,
 `SSp-ul`, …), with the full name in a `<title>`, so you can select and

@@ -15,6 +15,11 @@ function files = export_slices(histology_gui,opts)
 % OutputDir             - output folder (default <image_path>/figure_export)
 % Prefix                - filename prefix (default: image folder name)
 % RasterFormat          - 'png' (default) or 'tif'
+% WriteChannelStack     - raw per-channel TIFF stack for Fiji, full bit
+%                         depth, no colour limits applied (default true)
+% ChannelStackCompression - 'lzw' (default), 'none', 'packbits', 'deflate'
+% ImageJHeader          - ImageJ hyperstack metadata in the stack so Fiji
+%                         opens it as a composite (default true)
 % WriteCleanRaster      - histology only, no overlay (default true)
 % WriteOverlayRaster    - histology with overlay burned in (default false)
 % WriteVectorSVG        - transparent-background SVG overlay (default true)
@@ -38,6 +43,10 @@ arguments
     opts.OutputDir {mustBeTextScalar} = ''
     opts.Prefix {mustBeTextScalar} = ''
     opts.RasterFormat {mustBeMember(opts.RasterFormat,{'png','tif'})} = 'png'
+    opts.WriteChannelStack (1,1) logical = true
+    opts.ChannelStackCompression {mustBeMember(opts.ChannelStackCompression, ...
+        {'none','lzw','packbits','deflate'})} = 'lzw'
+    opts.ImageJHeader (1,1) logical = true
     opts.WriteCleanRaster (1,1) logical = true
     opts.WriteOverlayRaster (1,1) logical = false
     opts.WriteVectorSVG (1,1) logical = true
@@ -108,21 +117,28 @@ include_atlas = opts.IncludeAtlas && ~isempty(st);
 need_vectors = opts.WriteVectorSVG || opts.WriteCombinedSVG;
 need_clean = opts.WriteCleanRaster || opts.WriteCombinedSVG;
 need_overlay = opts.WriteOverlayRaster || (need_vectors && include_atlas);
+need_render = need_clean || need_overlay || need_vectors;
 
 % Remember where the gui was and how it was set up, and guarantee both are
 % put back however this function exits
-original_slice = gui_data.curr_slice;
-view_state = dlh.restore_view(histology_gui);
-restorer = onCleanup(@() local_restore(histology_gui,original_slice,view_state)); %#ok<NASGU>
+% (skipped entirely for a channel-stack-only export, which never redraws -
+% worth having when the gui itself is slow, e.g. over a remote session)
+if need_render
+    original_slice = gui_data.curr_slice;
+    view_state = dlh.restore_view(histology_gui);
+    restorer = onCleanup(@() local_restore(histology_gui,original_slice,view_state)); %#ok<NASGU>
+end
 
 n_slices = length(gui_data.data);
 
 for curr_slice = slices
 
-    % Move gui to this slice
-    gui_data = guidata(histology_gui);
-    gui_data.curr_slice = curr_slice;
-    guidata(histology_gui,gui_data);
+    % Move gui to this slice (only matters if something will redraw)
+    if need_render
+        gui_data = guidata(histology_gui);
+        gui_data.curr_slice = curr_slice;
+        guidata(histology_gui,gui_data);
+    end
 
     fprintf('dlh: exporting slice %d (of %d)...\n',curr_slice,n_slices);
 
@@ -130,6 +146,18 @@ for curr_slice = slices
     im_size = [];
     clean_file = '';
     clean_is_temp = false;
+
+    % --- Raw channel stack for Fiji ------------------------------------
+    % (straight from gui_data.data, no compositing and no redraw)
+    if opts.WriteChannelStack
+        [im_channels,channel_info] = dlh.slice_channels(histology_gui,curr_slice);
+        stack_file = [base '_channels.tif'];
+        dlh.write_channel_tiff(stack_file,im_channels,channel_info, ...
+            'Compression',opts.ChannelStackCompression, ...
+            'ImageJHeader',opts.ImageJHeader);
+        files{end+1} = stack_file; %#ok<AGROW>
+        clear im_channels
+    end
 
     % --- Histology raster, current colours, no overlay -----------------
     if need_clean
