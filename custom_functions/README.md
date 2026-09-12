@@ -8,6 +8,14 @@ so `git pull` from `petersaj/AP_histology` never conflicts with it.
   `NP-Analysis/matlab_functions/`, which made a clean checkout fail at
   `load_images`. **Remove that folder from your MATLAB path** so the old
   copy can't shadow this one.
+- `compat/hex2rgb.m` — shim for MATLAB's built-in `hex2rgb`, which only
+  exists from **R2024a**. Upstream uses it in `choose_histology_atlas` and
+  `align_auto_histology_atlas`, so on older MATLAB those fail with
+  *Unrecognized function or variable 'hex2rgb'*. Added to the path only
+  when the built-in is missing — see `dlh.setup_path`.
+- `+dlh/setup_path.m` — path setup that handles both the split package
+  folders and the compat shims. Use instead of a bare
+  `addpath(genpath(...))`.
 - `+dlh/` — figure export (below).
 
 ---
@@ -28,8 +36,15 @@ with this. The menu is injected into the AP_histology figure at runtime.
 `addpath(genpath('...\AP_histology'))` it already is. Otherwise:
 
 ```matlab
-addpath('C:\path\to\AP_histology\custom_functions')
+addpath('/path/to/AP_histology/custom_functions')
+dlh.setup_path
 ```
+
+`dlh.setup_path` does the `genpath` for you and, on MATLAB older than
+R2024a, switches on the `compat/` shims (and switches them off again on
+newer MATLAB so they can't shadow the real built-ins). Put those two lines
+in a `startup.m` in your `userpath` — on a shared HPC install `savepath`
+tends to be read-only or get clobbered.
 
 Check it works (no images or atlas needed):
 
