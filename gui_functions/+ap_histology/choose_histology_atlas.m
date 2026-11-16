@@ -505,7 +505,7 @@ if ~strcmpi(user_confirm,'ok')
     return
 end
 
-progress_box = uiprogressdlg(gui_fig,'Message','','indeterminate','on');
+progress_box = uiprogressdlg(gui_fig,'Message','','Indeterminate','on');
 
 % Save slices
 progress_box.Message = 'Saving slices...';
